@@ -2,9 +2,11 @@ from collections import namedtuple
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import logging
+import os
 import sys
 
 import requests
+from slack_sdk import WebClient
 
 logging.basicConfig(
     filename="logs/nba.txt",
@@ -89,13 +91,41 @@ def get_last_nights_games(date: datetime) -> tuple[set[str], dict[str, int]] | N
     return {row[4] for row in games}, {row[2]: row[9] for row in games}
 
 
+def send_scores(games: list[Game], yesterday: datetime) -> None:
+    bot_token = os.environ["SLACK_BOT_TOKEN"]
+    channel_id = os.environ["SLACK_CHANNEL_ID"]
+    client = WebClient(token=bot_token)
+    client.chat_postMessage(
+        channel=channel_id,
+        blocks=[
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*NBA* scores of *{yesterday.strftime('%d/%m/%Y')}* :basketball:",
+                },
+            },
+            {"type": "divider"},
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "\n".join([str(game) for game in games]),
+                },
+            }
+        ]
+    )
+
+
 if __name__ == "__main__":
     yesterday = datetime.today() - timedelta(days=1)
 
-    games, team_scores = get_last_nights_games(yesterday)
-    if games is None:
+    game_ids, team_scores = get_last_nights_games(yesterday)
+    if game_ids is None or len(game_ids) == 0:
         LOGGER.info("No games found last night")
         sys.exit(0)
 
-    for game_id in games:
-        print(get_game_info(game_id, team_scores))
+    games = [get_game_info(game_id, team_scores) for game_id in game_ids]
+
+    if len(games) != 0:
+        send_scores(games, yesterday)
