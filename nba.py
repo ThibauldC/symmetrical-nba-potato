@@ -5,7 +5,7 @@ import logging
 import os
 import sys
 
-import requests
+from curl_cffi import requests as curl_requests
 from slack_sdk import WebClient
 
 logging.basicConfig(
@@ -20,18 +20,11 @@ LOGGER = logging.getLogger(__name__)
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
     "x-nba-stats-origin": "stats",
     "x-nba-stats-token": "true",
-    "Referer": "https://www.nba.com",
-    "Origin": "https://www.nba.com",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Accept": "application/json, text/plain, */*",
-    "Sec-Fetch-Site": "same-site",
-    "Sec-Fetch-Mode": "cors",
-    "Sec-Fetch-Dest": "empty",
-    "sec-ch-ua": '"Chromium";v="120", "Google Chrome";v="120", "Not:A-Brand";v="99"',
-    "sec-ch-ua-platform": '"Windows"',
+    "Referer": "https://www.nba.com/",
+    "Origin": "https://www.nba.com/"
 }
 
 Team = namedtuple("Team", ["abbreviation", "pts", "record"])
@@ -53,13 +46,19 @@ def get_game_info(game_id: str, team_scores: dict[str, int]) -> Game:
         "GameID": game_id
     }
 
-    with requests.Session() as session:
-        session.headers.update(HEADERS)
-        resp = session.get(game_url, params=params, timeout=10)
-        if resp.status_code != 200:
-            LOGGER.error(f"No game info found for id {game_id}, status code {resp.status_code}")
+    resp = curl_requests.get(
+        game_url,
+        headers=HEADERS,
+        params=params,
+        impersonate="chrome110",
+        timeout=10
+    )
+
+    if resp.status_code != 200:
+        LOGGER.error(f"No game info found for id {game_id}, status code {resp.status_code}")
     all_game_info = [info["rowSet"] for info in resp.json().get("resultSets") if info["name"] == "LineScore"][0]
     # TODO: get home and away team correct
+
     home_game_stats, away_game_stats = all_game_info
     home_team_abbr, away_team_abbr = home_game_stats[4], away_game_stats[4]
     home_team_pts = home_game_stats[-1] if home_game_stats[-1] is not None else team_scores[home_team_abbr]
@@ -80,9 +79,13 @@ def get_last_nights_games(date: datetime) -> tuple[set[str], dict[str, int]] | N
 
     games_url = "https://stats.nba.com/stats/leaguegamefinder"
 
-    with requests.Session() as session:
-        session.headers.update(HEADERS)
-        resp = session.get(games_url, params=params, timeout=10)
+    resp = curl_requests.get(
+        games_url,
+        headers=HEADERS,
+        params=params,
+        impersonate="chrome110",
+        timeout=10
+    )
 
     if resp.status_code != 200:
         return None
