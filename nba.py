@@ -17,7 +17,7 @@ from curl_cffi import requests as curl_requests
 from slack_sdk import WebClient
 
 logging.basicConfig(
-    filename="logs/nba.txt",
+    filename=f"{os.path.dirname(__file__)}/logs/nba.txt",
     filemode="a",
     format="%(asctime)s,%(msecs)03d %(name)s %(levelname)s %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
