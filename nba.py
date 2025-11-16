@@ -1,3 +1,11 @@
+# /// script
+# dependencies = [
+#   "curl-cffi>=0.13.0",
+#   "httpx[http2]>=0.28.1",
+#   "slack-sdk>=3.37.0",
+# ]
+# ///
+
 from collections import namedtuple
 from dataclasses import dataclass
 from datetime import datetime, timedelta
