@@ -1,0 +1,17 @@
+name: Workflow for getting NBA scores
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+jobs:
+  nba:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+      - name: Run NBA score getter
+        run: |
+          SLACK_BOT_TOKEN=${{env.SLACK_BOT_TOKEN}} SLACK_CHANNEL_ID=${{env.SLACK_CHANNEL_ID}} uv run nba.py
