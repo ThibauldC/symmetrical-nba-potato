@@ -20,7 +20,7 @@ from slack_sdk import WebClient
 logging.basicConfig(
     format="%(asctime)s,%(msecs)03d %(name)s %(levelname)s %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    level=logging.DEBUG
+    level=logging.INFO
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -44,52 +44,34 @@ class Game:
     def __str__(self):
         home_team_record = f"({self.home_team.record})" if self.home_team.record is not None else ""
         away_team_record = f"({self.away_team.record})" if self.away_team.record is not None else ""
-        return f"{self.home_team.abbreviation}{home_team_record}-{self.away_team.abbreviation}{away_team_record}: {self.home_team.pts}-{self.away_team.pts}"
+        return f"{self.home_team.abbreviation} {home_team_record}-{self.away_team.abbreviation} {away_team_record}: {self.home_team.pts}-{self.away_team.pts}\n"
 
 
-def get_game_info(game_id: str, team_scores: dict[str, int]) -> Game:
-    game_url = "https://stats.nba.com/stats/boxscoresummaryv2"
-    params = {
-        "GameID": game_id
-    }
+def get_game_info(game: dict[str, int | str]) -> Game:
 
-    resp = curl_requests.get(
-        game_url,
-        headers=HEADERS,
-        params=params,
-        impersonate="chrome110",
-        timeout=10
+    home_team_info = game["homeTeam"]
+    away_team_info = game["awayTeam"]
+
+    home_team = Team(
+        home_team_info["teamTricode"],
+        home_team_info["score"],
+        f"{home_team_info['wins']}-{home_team_info['losses']}"
     )
-
-    if resp.status_code != 200:
-        LOGGER.error(f"No game info found for id {game_id}, status code {resp.status_code}")
-    all_game_info = [info["rowSet"] for info in resp.json().get("resultSets") if info["name"] == "LineScore"][0]
-    # TODO: get home and away team correct
-
-    home_game_stats, away_game_stats = all_game_info
-    home_team_abbr, away_team_abbr = home_game_stats[4], away_game_stats[4]
-    home_team_pts = home_game_stats[-1] if home_game_stats[-1] is not None else team_scores[home_team_abbr]
-    away_team_pts = away_game_stats[-1] if away_game_stats[-1] is not None else team_scores[away_team_abbr]
-
-    home_team = Team(home_team_abbr, home_team_pts, home_game_stats[7])
-    away_team = Team(away_team_abbr, away_team_pts, away_game_stats[7])
+    away_team = Team(
+        away_team_info["teamTricode"],
+        away_team_info["score"],
+        f"{away_team_info['wins']}-{away_team_info['losses']}"
+    )
 
     return Game(home_team, away_team)
 
 
-def get_last_nights_games(date: datetime) -> tuple[set[str], dict[str, int]] | None:
-    params = {
-        "playerOrTeam": "T",
-        "LeagueID": "00",
-        "DateFrom": date.strftime("%m/%d/%Y"),
-    }
-
-    games_url = "https://stats.nba.com/stats/leaguegamefinder"
+def get_last_nights_games() -> list[Game] | None:
+    games_url = "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
 
     resp = curl_requests.get(
         games_url,
         headers=HEADERS,
-        params=params,
         impersonate="chrome110",
         timeout=10
     )
@@ -97,8 +79,8 @@ def get_last_nights_games(date: datetime) -> tuple[set[str], dict[str, int]] | N
     if resp.status_code != 200:
         return None
 
-    games = resp.json().get("resultSets")[0].get("rowSet")
-    return {row[4] for row in games}, {row[2]: row[9] for row in games}
+    games = resp.json().get("scoreboard").get("games")
+    return [get_game_info(game) for game in games]
 
 
 def send_scores(games: list[Game], yesterday: datetime) -> None:
@@ -130,12 +112,11 @@ def send_scores(games: list[Game], yesterday: datetime) -> None:
 if __name__ == "__main__":
     yesterday = datetime.today() - timedelta(days=1)
 
-    game_ids, team_scores = get_last_nights_games(yesterday)
-    if game_ids is None or len(game_ids) == 0:
+    games = get_last_nights_games()
+    if games is None or len(games) == 0:
         LOGGER.info("No games found last night")
         sys.exit(0)
 
-    games = [get_game_info(game_id, team_scores) for game_id in game_ids]
 
     if len(games) != 0:
         send_scores(games, yesterday)
